@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <title>Client Măsurători</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      min-height: 100vh;
+      background: linear-gradient(120deg, #e3f0fc 0%, #fafcff 100%);
+    }
+    h1, h2 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .marquee {
+      width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+      background: linear-gradient(90deg, #1976d2aa 0%, #64b5f6cc 100%);
+      color: #fff;
+      border-bottom: 3px solid #1976d2;
+      font-size: 1.2em;
+      margin-bottom: 22px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      position: relative;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px 0 rgba(30,60,100,0.16);
+      backdrop-filter: blur(7px);
+      letter-spacing: 0.03em;
+    }
+    .marquee span {
+      display: inline-block;
+      padding-left: 100%;
+      animation: scroll-left 14s linear infinite;
+      font-weight: 500;
+      text-shadow: 0 2px 6px rgba(30,60,100,0.16);
+    }
+    @keyframes scroll-left {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-100%); }
+    }
+    form, .masurare {
+      background: rgba(255,255,255,0.93);
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(30,60,100,0.08);
+    }
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 10px 12px;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      font-weight: bold;
+    }
+    input {
+      padding: 5px;
+      font-size: 1em;
+      width: 200px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    ul {
+      list-style: disc;
+      padding-left: 30px;
+    }
+    .masurare { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Client Măsurători</h1>
+  <div id="meteo-banner" class="marquee">
+    <span id="meteo-text">Se încarcă datele meteo...</span>
+  </div>
+
+  <form id="form">
+    <label>ID:
+      <input type="number" id="id" required>
+    </label>
+    <label>Valoare:
+      <input type="number" id="valoare" step="0.1" required>
+    </label>
+    <label>Unitate:
+      <input type="text" id="unitate" value="°C" required>
+    </label>
+    <label>Timestamp:
+      <input type="datetime-local" id="timestamp" required>
+    </label>
+    <button type="submit">Trimite</button>
+    <button type="button" id="btn-actualizeaza">Actualizează</button>
+    <button type="button" id="btn-post-id">POST /masuratori/{id}</button>
+  </form>
+
+  <h2>Șterge după ID</h2>
+  <label>ID de șters:
+    <input type="number" id="delete-id">
+  </label>
+  <button id="btn-sterge">Șterge</button>
+
+  <h2>Șterge toate măsurătorile:</h2>
+  <button id="btn-sterge-toate" style="background-color: crimson; color: white;">Șterge tot</button>
+
+  <h2>Lista măsurători:</h2>
+  <ul id="lista"></ul>
+
+  <h2>Grafic temperaturi, umiditate, presiune</h2>
+  <canvas id="tempChart" width="600" height="300"></canvas>
+
+  <h2>PUT pe colecție – Măsurători Multiple</h2>
+  <div id="masurari-container"></div>
+  <button id="btn-adauga"> Adaugă măsurătoare</button>
+  <button id="btn-trimite" style="background: #28a745; color: white;"> Trimite toate (PUT colecție)</button>
+
+  <h2>📍 Adaugă locație</h2>
+  <button onclick="adaugaLocatie()">Adaugă locație</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const apiUrl = "https://fastapi-app-875499748544.europe-west1.run.app/masuratori";
+    const username = "admin";
+    const password = "admin";
+    const token = btoa(`${username}:${password}`);
+
+    // --- METEO + POLUARE BANNER ---
+    const openWeatherApiKey = "876928dd7616fea92de3485c885a06ee"; 
+    const openWeatherCity = "Iasi";
+    const openWeatherCountry = "RO";
+    const lat = 47.153148; // pentru București; schimbi dacă vrei alt oraș
+    const lon = 27.593865;
+
+    async function updateMeteoBanner() {
+      const urlMeteo = `https://api.openweathermap.org/data/2.5/weather?q=${openWeatherCity},${openWeatherCountry}&appid=${openWeatherApiKey}&units=metric`;
+      const urlPoluare = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${openWeatherApiKey}`;
+      try {
+        const respMeteo = await fetch(urlMeteo);
+        if (!respMeteo.ok) throw new Error("Eroare OpenWeather Meteo");
+        const dataMeteo = await respMeteo.json();
+        const pres = dataMeteo.main.pressure;
+        const umid = dataMeteo.main.humidity;
+        const vant = dataMeteo.wind.speed;
+
+        const respPol = await fetch(urlPoluare);
+        if (!respPol.ok) throw new Error("Eroare OpenWeather Poluare");
+        const dataPol = await respPol.json();
+        const pol = dataPol.list[0];
+        const index = pol.main.aqi; // Air Quality Index 1=excelent, 5=foarte slab
+        const pm25 = pol.components.pm2_5;
+        const pm10 = pol.components.pm10;
+
+        const niveluriAQI = ["", "excelent", "bun", "moderat", "slab", "foarte slab"];
+        let colorAQI = "#43a047";
+        if (index >= 4) colorAQI = "#ff5722";
+        else if (index === 3) colorAQI = "#ffa000";
+
+        const textPol = `Calitate aer: <b style="color:${colorAQI}">${niveluriAQI[index]}</b> (PM2.5: <b>${pm25}</b> µg/m³, PM10: <b>${pm10}</b> µg/m³)`;
+
+        document.getElementById("meteo-text").innerHTML =
+          `🌤️ ${openWeatherCity}: Presiune <b>${pres}</b> hPa | Umiditate <b>${umid}%</b> | Vânt <b>${vant}</b> m/s &nbsp;|&nbsp; 🏭 ${textPol} <span style="font-size:0.88em;"></span>`;
+      } catch (e) {
+        document.getElementById("meteo-text").textContent = "Nu s-au putut obține date meteo sau poluare live!";
+      }
+    }
+    updateMeteoBanner();
+    setInterval(updateMeteoBanner, 300000);
+
+    // --- GRAFIC TEMP, UMIDITATE, PRESIUNE ---
+    let chart;
+    function afiseazaGrafic(masuratori) {
+      const temp = masuratori.filter(m => m.unitate === "°C");
+      const pres = masuratori.filter(m => m.unitate === "hPa");
+      const umid = masuratori.filter(m => m.unitate === "%");
+      const labels = temp.map(m => new Date(m.timestamp).toLocaleString());
+
+      const data = {
+        labels: labels,
+        datasets: [
+          {
+            label: "Temperatură (°C)",
+            data: temp.map(m => m.valoare),
+            borderColor: "#1976d2",
+            backgroundColor: "rgba(80,160,255,0.14)",
+            yAxisID: 'y',
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: "Umiditate (%)",
+            data: umid.map(m => m.valoare),
+            borderColor: "#43a047",
+            backgroundColor: "rgba(100,250,120,0.11)",
+            yAxisID: 'y1',
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          },
+          {
+            label: "Presiune (hPa)",
+            data: pres.map(m => m.valoare),
+            borderColor: "#7b1fa2",
+            backgroundColor: "rgba(180,130,250,0.08)",
+            yAxisID: 'y2',
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+          }
+        ]
+      };
+
+      const config = {
+        type: "line",
+        data: data,
+        options: {
+          responsive: true,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          stacked: false,
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) label += ': ';
+                  if (context.parsed.y !== null) label += context.parsed.y;
+                  return label;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              title: { display: true, text: "Temperatură (°C)" },
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              title: { display: true, text: "Umiditate (%)" },
+            },
+            y2: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              title: { display: true, text: "Presiune (hPa)" },
+            }
+          }
+        }
+      };
+
+      if (chart) chart.destroy();
+      const ctx = document.getElementById("tempChart").getContext("2d");
+      chart = new Chart(ctx, config);
+    }
+
+    // --- RESTUL CLIENTULUI ---
+    async function incarcaMasuratori() {
+      const resp = await fetch(apiUrl);
+      const masuratori = await resp.json();
+      const lista = document.getElementById("lista");
+      lista.innerHTML = "";
+      masuratori.forEach(m => {
+        const li = document.createElement("li");
+        li.textContent = `${m.id}: ${m.valoare} ${m.unitate} (${m.timestamp})`;
+        lista.appendChild(li);
+      });
+      afiseazaGrafic(masuratori);
+    }
+
+    function preiaDateFormular() {
+      return {
+        id: parseInt(document.getElementById("id").value),
+        valoare: parseFloat(document.getElementById("valoare").value),
+        unitate: document.getElementById("unitate").value,
+        timestamp: new Date(document.getElementById("timestamp").value).toISOString()
+      };
+    }
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = preiaDateFormular();
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (resp.ok) incarcaMasuratori(); else alert("Eroare la trimitere!");
+    });
+
+    document.getElementById("btn-actualizeaza").addEventListener("click", async () => {
+      const payload = preiaDateFormular();
+      const resp = await fetch(`${apiUrl}/${payload.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (resp.ok) incarcaMasuratori(); else alert("Eroare la actualizare!");
+    });
+
+    document.getElementById("btn-post-id").addEventListener("click", async () => {
+      const payload = preiaDateFormular();
+      const resp = await fetch(`${apiUrl}/${payload.id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (resp.ok) incarcaMasuratori(); else alert("Eroare la POST /{id}!");
+    });
+
+    document.getElementById("btn-sterge").addEventListener("click", async () => {
+      const id = document.getElementById("delete-id").value;
+      if (!id) return alert("Introdu un ID pentru șters.");
+      const resp = await fetch(`${apiUrl}/${id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Basic ${token}` }
+      });
+      if (resp.status === 204) incarcaMasuratori(); else alert("Eroare la ștergere!");
+    });
+
+    document.getElementById("btn-sterge-toate").addEventListener("click", async () => {
+      if (!confirm("Ești sigur că vrei să ștergi toate măsurătorile?")) return;
+      const resp = await fetch(apiUrl, {
+        method: "DELETE",
+        headers: { "Authorization": `Basic ${token}` }
+      });
+      if (resp.status === 204) incarcaMasuratori(); else alert("Eroare la ștergerea tuturor!");
+    });
+
+    // Secțiune dinamică PUT colecție
+    const container = document.getElementById("masurari-container");
+    function adaugaFormular() {
+      const div = document.createElement("div");
+      div.className = "masurare";
+      div.innerHTML = `
+        <label>ID: <input type="number" class="id"></label>
+        <label>Valoare: <input type="number" class="valoare" step="0.1"></label>
+        <label>Unitate: <input type="text" class="unitate" value="°C"></label>
+        <label>Timp: <input type="datetime-local" class="timestamp"></label>
+        <button onclick="this.parentNode.remove()">🗑️ Șterge</button>
+      `;
+      container.appendChild(div);
+    }
+
+    document.getElementById("btn-adauga").addEventListener("click", adaugaFormular);
+
+    document.getElementById("btn-trimite").addEventListener("click", async () => {
+      const masurari = [];
+      container.querySelectorAll(".masurare").forEach(bloc => {
+        masurari.push({
+          id: parseInt(bloc.querySelector(".id").value),
+          valoare: parseFloat(bloc.querySelector(".valoare").value),
+          unitate: bloc.querySelector(".unitate").value,
+          timestamp: new Date(bloc.querySelector(".timestamp").value).toISOString()
+        });
+      });
+
+      const resp = await fetch(apiUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${token}`
+        },
+        body: JSON.stringify(masurari)
+      });
+
+      if (resp.ok) {
+        alert("Colecția a fost înlocuită!");
+        incarcaMasuratori();
+      } else {
+        alert("Eroare la trimitere PUT colecție.");
+      }
+    });
+
+    // --- Adaugă locație cu autentificare ---
+    async function adaugaLocatie() {
+      const token = btoa("admin:admin");
+      const r = await fetch("http://127.0.0.1:8000/masuratori/locatie", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${token}`
+        }
+      });
+      const data = await r.json();
+      console.log("Locație adăugată:", data);
+      incarcaMasuratori();
+    }
+
+    incarcaMasuratori();
+  </script>
+</body>
+</html>
