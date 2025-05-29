@@ -2,7 +2,7 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8">
-  <title>Client Măsurători</title>
+  <title> Management Măsurători </title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -80,7 +80,7 @@
   </style>
 </head>
 <body>
-  <h1>Client Măsurători</h1>
+  <h1>Management Măsurători</h1>
   <div id="meteo-banner" class="marquee">
     <span id="meteo-text">Se încarcă datele meteo...</span>
   </div>
@@ -92,7 +92,7 @@
     <label>Valoare:
       <input type="number" id="valoare" step="0.1" required>
     </label>
-    <label>Unitate:
+    <label>Unitate măsură :
       <input type="text" id="unitate" value="°C" required>
     </label>
     <label>Timestamp:
@@ -100,7 +100,7 @@
     </label>
     <button type="submit">Trimite</button>
     <button type="button" id="btn-actualizeaza">Actualizează</button>
-    <button type="button" id="btn-post-id">POST /masuratori/{id}</button>
+    <button type="button" id="btn-post-id">POST</button>
   </form>
 
   <h2>Șterge după ID</h2>
@@ -118,12 +118,12 @@
   <h2>Grafic temperaturi, umiditate, presiune</h2>
   <canvas id="tempChart" width="600" height="300"></canvas>
 
-  <h2>PUT pe colecție – Măsurători Multiple</h2>
+  <h2>Modifică una sau mai multe Măsurători</h2>
   <div id="masurari-container"></div>
   <button id="btn-adauga"> Adaugă măsurătoare</button>
   <button id="btn-trimite" style="background: #28a745; color: white;"> Trimite toate (PUT colecție)</button>
 
-  <h2>📍 Adaugă locație</h2>
+  <h2> Adaugă locație</h2>
   <button onclick="adaugaLocatie()">Adaugă locație</button>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
